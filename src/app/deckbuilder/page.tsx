@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
 import SavedDecks from "@/components/SavedDecks";
+import AttributeIcon from "@/components/AttributeIcons";
+import CardTypeIcon from "@/components/CardTypeIcons";
 
 interface Card {
   id: number;
@@ -84,6 +86,11 @@ export default function DeckBuilder() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deckName, setDeckName] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedAttributes, setSelectedAttributes] = useState<string[]>([]);
+  const [selectedLevels, setSelectedLevels] = useState<number[]>([]);
+  const [sortBy, setSortBy] = useState<'level' | 'atk' | 'def' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const cardsPerPage = 32;
   const [currentDeck, setCurrentDeck] = useState<Deck>({
     mainDeck: [],
@@ -111,12 +118,54 @@ export default function DeckBuilder() {
   // Funktion zum Filtern der Karten
   const filterCards = (allCards: Card[], search: string) => {
     const searchLower = search.toLowerCase();
-    return allCards.filter(card => 
-      !search.trim() || 
-      card.name.toLowerCase().includes(searchLower) ||
-      card.type.toLowerCase().includes(searchLower) ||
-      card.race.toLowerCase().includes(searchLower)
-    );
+    let filteredCards = allCards.filter(card => {
+      // Textsuche
+      const matchesSearch = !search.trim() || 
+        card.name.toLowerCase().includes(searchLower) ||
+        card.type.toLowerCase().includes(searchLower) ||
+        card.race.toLowerCase().includes(searchLower);
+
+      // Typ-Filter
+      const matchesType = selectedTypes.length === 0 || 
+        selectedTypes.some(type => card.type.toLowerCase().includes(type.toLowerCase()));
+
+      // Attribut-Filter
+      const matchesAttribute = selectedAttributes.length === 0 || 
+        (card.attribute && selectedAttributes.includes(card.attribute));
+
+      // Level-Filter
+      const matchesLevel = selectedLevels.length === 0 || 
+        (card.level && selectedLevels.includes(card.level));
+
+      return matchesSearch && matchesType && matchesAttribute && matchesLevel;
+    });
+
+    // Sortiere nach Level, wenn aktiviert
+    if (sortBy) {
+      filteredCards.sort((a, b) => {
+        let valueA = 0;
+        let valueB = 0;
+
+        switch (sortBy) {
+          case 'level':
+            valueA = a.level || 0;
+            valueB = b.level || 0;
+            break;
+          case 'atk':
+            valueA = a.atk || 0;
+            valueB = b.atk || 0;
+            break;
+          case 'def':
+            valueA = a.def || 0;
+            valueB = b.def || 0;
+            break;
+        }
+
+        return sortOrder === 'desc' ? valueB - valueA : valueA - valueB;
+      });
+    }
+
+    return filteredCards;
   };
 
   // Berechne die aktuellen Karten für die aktuelle Seite
@@ -151,7 +200,7 @@ export default function DeckBuilder() {
           allCards = await loadAllCards();
         }
 
-        // Filtere die Karten basierend auf dem Suchbegriff
+        // Filtere die Karten basierend auf dem Suchbegriff und den Filtern
         const filteredCards = filterCards(allCards, searchTerm);
         setCards(filteredCards);
       } catch (err) {
@@ -168,7 +217,7 @@ export default function DeckBuilder() {
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, selectedTypes, selectedAttributes, selectedLevels, sortBy, sortOrder]);
 
   useEffect(() => {
     const handleMouseOver = (e: MouseEvent) => {
@@ -273,27 +322,31 @@ export default function DeckBuilder() {
   };
 
   const renderHoverInfo = (card: Card) => (
-    <div className="absolute z-50 hidden group-hover:block bg-white p-2 rounded-lg shadow-xl border border-gray-200 w-64 left-1/2 -translate-x-1/2 hover-info">
-      <div className="text-sm max-h-48 overflow-y-auto pr-1">
-        <h4 className="font-bold text-gray-800 mb-1">{card.name}</h4>
-        <p className="text-gray-600 mb-1">{card.type}</p>
-        {card.attribute && (
-          <p className="text-gray-600 mb-1">Attribute: {card.attribute}</p>
-        )}
-        {card.level && (
-          <p className="text-gray-600 mb-1">Level: {card.level}</p>
-        )}
-        {card.race && (
-          <p className="text-gray-600 mb-1">Race: {card.race}</p>
-        )}
-        {card.atk !== undefined && (
-          <p className="text-gray-600 mb-1">ATK: {card.atk} / DEF: {card.def}</p>
-        )}
-        <p className="text-gray-600 text-xs mt-1">{card.desc}</p>
+    <>
+      {/* Unsichtbarer Verbindungsbereich */}
+      <div className="absolute z-40 hidden group-hover:block w-full h-4 bottom-full"></div>
+      <div className="absolute z-50 hidden group-hover:block bg-white p-2 rounded-lg shadow-xl border border-gray-200 w-64 left-1/2 -translate-x-1/2 hover-info">
+        <div className="text-sm max-h-48 overflow-y-auto pr-1">
+          <h4 className="font-bold text-gray-800 mb-1">{card.name}</h4>
+          <p className="text-gray-600 mb-1">{card.type}</p>
+          {card.attribute && (
+            <p className="text-gray-600 mb-1">Attribute: {card.attribute}</p>
+          )}
+          {card.level && (
+            <p className="text-gray-600 mb-1">Level: {card.level}</p>
+          )}
+          {card.race && (
+            <p className="text-gray-600 mb-1">Type: {card.race}</p>
+          )}
+          {card.atk !== undefined && (
+            <p className="text-gray-600 mb-1">ATK: {card.atk} / DEF: {card.def}</p>
+          )}
+          <p className="text-gray-600 text-xs mt-1">{card.desc}</p>
+        </div>
+        {/* Pfeil nach unten/oben */}
+        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-white border-r border-b border-gray-200"></div>
       </div>
-      {/* Pfeil nach unten/oben */}
-      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-white border-r border-b border-gray-200"></div>
-    </div>
+    </>
   );
 
   const renderDeckSection = (deckType: 'mainDeck' | 'extraDeck' | 'sideDeck', title: string, maxCards: number) => (
@@ -520,6 +573,196 @@ export default function DeckBuilder() {
                 />
               </div>
 
+              {/* Filter-Bereich */}
+              <div className="mb-4 space-y-4">
+                {/* Level Filter */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 text-gray-700">Level</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          setSelectedLevels(prev => 
+                            prev.includes(level) 
+                              ? prev.filter(l => l !== level)
+                              : [...prev, level]
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${
+                          selectedLevels.includes(level)
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <AttributeIcon 
+                          attribute="LEVEL" 
+                          className={`w-4 h-4 ${
+                            selectedLevels.includes(level)
+                              ? 'text-white'
+                              : 'text-gray-700'
+                          }`}
+                        />
+                        <span>{level}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sortierung */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 text-gray-700">Sortierung</h3>
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex rounded-full overflow-hidden border border-gray-200">
+                      <button
+                        onClick={() => {
+                          setSortBy(sortBy === 'level' ? null : 'level');
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-1.5 transition-colors ${
+                          sortBy === 'level'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <AttributeIcon 
+                          attribute="LEVEL" 
+                          className={`w-4 h-4 ${
+                            sortBy === 'level'
+                              ? 'text-white'
+                              : 'text-gray-700'
+                          }`}
+                        />
+                        <span className="text-sm">Level</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSortBy(sortBy === 'atk' ? null : 'atk');
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-1.5 transition-colors border-l border-r border-gray-300 ${
+                          sortBy === 'atk'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <span className="font-bold text-sm">ATK</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSortBy(sortBy === 'def' ? null : 'def');
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-1.5 transition-colors ${
+                          sortBy === 'def'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <span className="font-bold text-sm">DEF</span>
+                      </button>
+                    </div>
+                    {sortBy && (
+                      <button
+                        onClick={() => {
+                          setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+                          setCurrentPage(1);
+                        }}
+                        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                        title={sortOrder === 'desc' ? 'Höchste Werte zuerst' : 'Niedrigste Werte zuerst'}
+                      >
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          className={`w-4 h-4 transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} 
+                          viewBox="0 0 20 20" 
+                          fill="currentColor"
+                        >
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Karten-Typ Filter */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 text-gray-700">Card Types</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { type: 'Ritual', label: 'Ritual' },
+                      { type: 'Quick-Play', label: 'Quick-Play' },
+                      { type: 'Continuous', label: 'Continuous' },
+                      { type: 'Equip', label: 'Equip' },
+                      { type: 'Field', label: 'Field' },
+                      { type: 'Counter', label: 'Counter' }
+                    ].map(({ type, label }) => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setSelectedTypes(prev => 
+                            prev.includes(type) 
+                              ? prev.filter(t => t !== type)
+                              : [...prev, type]
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center gap-2 px-3 py-1 rounded-full transition-colors ${
+                          selectedTypes.includes(type)
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <CardTypeIcon 
+                          type={type} 
+                          className={`w-5 h-5 ${
+                            selectedTypes.includes(type)
+                              ? 'text-white'
+                              : 'text-gray-700'
+                          }`}
+                        />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Attribut Filter */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 text-gray-700">Attributes</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {['DARK', 'LIGHT', 'WATER', 'FIRE', 'EARTH', 'WIND', 'DIVINE'].map((attribute) => (
+                      <button
+                        key={attribute}
+                        onClick={() => {
+                          setSelectedAttributes(prev => 
+                            prev.includes(attribute) 
+                              ? prev.filter(a => a !== attribute)
+                              : [...prev, attribute]
+                          );
+                          setCurrentPage(1);
+                        }}
+                        className={`p-2 rounded-full transition-colors ${
+                          selectedAttributes.includes(attribute)
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                        title={attribute}
+                      >
+                        <AttributeIcon 
+                          attribute={attribute} 
+                          className={`w-6 h-6 ${
+                            selectedAttributes.includes(attribute)
+                              ? 'text-white'
+                              : 'text-gray-700'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {loading && <p className="text-center text-gray-600">Loading...</p>}
               {error && <p className="text-red-600 text-center font-medium">{error}</p>}
 
@@ -534,12 +777,11 @@ export default function DeckBuilder() {
                       <img
                         src={card.card_images[0].image_url}
                         alt={card.name}
-                        className="w-full h-auto mb-1 flex-grow object-contain"
+                        className="w-full h-auto object-contain"
                       />
                     )}
-                    <div className="mt-auto">
-                      <h3 className="font-semibold text-[10px] text-gray-800 truncate">{card.name}</h3>
-                      <p className="text-[10px] text-gray-600 truncate">{card.type}</p>
+                    <div className="mt-1">
+                      <h3 className="font-semibold text-[10px] text-gray-800 line-clamp-2">{card.name}</h3>
                       {card.atk !== undefined && (
                         <p className="text-[10px] text-gray-700">
                           ATK: {card.atk} / DEF: {card.def}
@@ -603,4 +845,4 @@ export default function DeckBuilder() {
       `}</style>
     </div>
   );
-} 
+}
